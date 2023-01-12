@@ -1,15 +1,11 @@
 {
   "EmailConfig": {
-    "ClientId": "dd35c3ae-79a2-4b7c-ac78-2a10f272763c",
-    "TenantId": "1b6410fa-9ead-46cf-a6b8-47a23285d047",
-    "ClientSecret": "Eja8Q~T1-51cTbDBuwZU1NtzKCFNF.zA_Jp_3csg",
+    "ClientId": "db85b30e-5b5e-443f-b7e1-85bcbb5d5222",
+    "TenantId": "6fcf7bf2-2eb6-4b21-b92a-914d27ce33a8",
+    "ClientSecret": "lDR8Q~qaad5cpPy0ZZviIX86jnhRGTRqFvJHscIC",
     "Host": "smtp.office365.com",
     "Port": 587,
-    "EnableSSL": true,
-    "BodyIsHtml": true,
-    "RedirectUri_": "https://login.microsoftonline.com/common/oauth2/nativeclient/",
-    "RedirectUri": "http://localhost:8080/",
-    "AuthorizationUri": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id={0}&response_type=code&redirect_uri={1}&response_mode=query&scope={2}",
-    "GetTokenUri": "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+    "RedirectUri": "https://login.microsoftonline.com/common/oauth2/nativeclient",
+    "StoragePath": "LocalStorage\\LocalStorage.json"
   }
 }

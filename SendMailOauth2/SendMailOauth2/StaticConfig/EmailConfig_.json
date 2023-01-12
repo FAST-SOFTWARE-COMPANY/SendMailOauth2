@@ -1,0 +1,19 @@
+{
+  "EmailConfig": {
+    "DefaultAccount": {
+      "Email": "tuankhanh@qh40.onmicrosoft.com",
+      "Password": "fast#123"
+    },
+    "ClientId": "f516bb93-db8c-4166-932b-662b67ca249e",
+    "TenantId": "a5346598-f7ff-4250-a2ff-2c734df4d4aa",
+    "ClientSecret": "L3y8Q~RR57hfLOV-heXzRHxdWvnEfEBJxelMSbIN",
+    "Host": "smtp.office365.com",
+    "Port": 587,
+    "EnableSSL": true,
+    "BodyIsHtml": true,
+    "RedirectUri_": "https://login.microsoftonline.com/common/oauth2/nativeclient/",
+    "RedirectUri": "http://localhost:8080/",
+    "AuthorizationUri": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id={0}&response_type=code&redirect_uri={1}&response_mode=query&scope={2}",
+    "GetTokenUri": "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+  }
+}

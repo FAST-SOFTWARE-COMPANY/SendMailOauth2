@@ -19,6 +19,6 @@ namespace SendMailOAuth2.Config
         public string RedirectUri { get; set; }
         public string AuthorizationUri { get; set; }
         public string GetTokenUri { get; set; }
-        
+        public string StoragePath { get; set; }     // nơi lưu trữ access token và refresh token hiện
     }
 }

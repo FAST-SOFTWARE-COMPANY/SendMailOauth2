@@ -1,9 +1,8 @@
 ﻿using Newtonsoft.Json;
 using System;
-using System.Collections.Generic;
+using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Web;
 using System.Web.Script.Serialization;
 
 namespace SendMailOauth2.Extension
@@ -21,6 +20,7 @@ namespace SendMailOauth2.Extension
             T obj = JsonConvert.DeserializeObject<T>(jsonString);
             return obj;
         }
+        
         /// <summary>
         /// Convert an object to a json String
         /// </summary>
@@ -32,5 +32,20 @@ namespace SendMailOauth2.Extension
             JavaScriptSerializer serializer = new JavaScriptSerializer();
             return serializer.Serialize(obj);
         }
+        
+        /// <summary>
+        ///     A FileInfo extension method that renames.
+        /// </summary>
+        /// <param name="this">The @this to act on.</param>
+        /// <param name="newName">Name of the new.</param>
+        /// ###
+        /// <returns>.</returns>
+        public static void Rename(this FileInfo @this, string newName)
+        {
+            string filePath = Path.Combine(@this.Directory.FullName, newName);
+            @this.MoveTo(filePath);
+        }
+
     }
 }
+
