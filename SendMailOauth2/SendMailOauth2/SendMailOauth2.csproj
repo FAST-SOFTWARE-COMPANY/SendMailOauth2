@@ -98,9 +98,9 @@
       <AutoGen>True</AutoGen>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
-    <None Include="LocalStorage\LocalStorage.json">
+    <Content Include="LocalStorage\LocalStorage.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    </Content>
     <None Include="OAuth2Config.json" />
     <None Include="packages.config" />
     <None Include="Properties\Settings.settings">

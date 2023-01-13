@@ -49,31 +49,37 @@ namespace SendMailOAuth2.Models
         {
             try
             {
-                using (var sr = new StreamReader(Email._LocalStoragePath))
+                if (new FileInfo(Email._LocalStoragePath).Exists)
                 {
-                    string json = sr.ReadToEnd();
-                    JObject jConfig = JObject.Parse(json);
-                    var jTokenOAuth2 = jConfig.ToObject<JObject>();
+                    using (var sr = new StreamReader(Email._LocalStoragePath))
+                    {
+                        string json = sr.ReadToEnd();
+                        JObject jConfig = JObject.Parse(json);
+                        var jTokenOAuth2 = jConfig.ToObject<JObject>();
 
-                    var jGetTokenAccount = jTokenOAuth2["Account"];
-                    var jHomeAccountId = jGetTokenAccount["HomeAccountId"];
-                    if (_LocalTokenOAuth2 == null)
-                    {
-                        _LocalTokenOAuth2 = new TokenOAuth2();
+                        if (_LocalTokenOAuth2 == null)
+                        {
+                            _LocalTokenOAuth2 = new TokenOAuth2();
+                        }
+                        var jGetTokenAccount = jTokenOAuth2["Account"];
+                        if (jGetTokenAccount != null)
+                        {
+                            var jHomeAccountId = jGetTokenAccount["HomeAccountId"] ?? null;
+                            _LocalTokenOAuth2.AccessToken = jTokenOAuth2["AccessToken"].ToObject<string>();
+                            _LocalTokenOAuth2.ExpiresOn = jTokenOAuth2["ExpiresOn"]?.ToObject<DateTimeOffset>() ?? default(DateTimeOffset);
+                            _LocalTokenOAuth2.Account = new GetTokenAccount
+                            {
+                                Environment = jGetTokenAccount["Environment"].ToObject<string>(),
+                                Username = jGetTokenAccount["Username"].ToObject<string>(),
+                                HomeAccountId = new Microsoft.Identity.Client.AccountId(
+                                    jHomeAccountId["Identifier"].ToObject<string>(),
+                                    jHomeAccountId["ObjectId"].ToObject<string>(),
+                                    jHomeAccountId["TenantId"].ToObject<string>()
+                                )
+                            };
+                        }
+                        sr.Close();
                     }
-                    _LocalTokenOAuth2.AccessToken = jTokenOAuth2["AccessToken"].ToObject<string>();
-                    _LocalTokenOAuth2.ExpiresOn = jTokenOAuth2["ExpiresOn"]?.ToObject<DateTimeOffset>() ?? default(DateTimeOffset);
-                    _LocalTokenOAuth2.Account = new GetTokenAccount
-                    {
-                        Environment = jGetTokenAccount["Environment"].ToObject<string>(),
-                        Username = jGetTokenAccount["Username"].ToObject<string>(),
-                        HomeAccountId = new Microsoft.Identity.Client.AccountId(
-                            jHomeAccountId["Identifier"].ToObject<string>(),
-                            jHomeAccountId["ObjectId"].ToObject<string>(),
-                            jHomeAccountId["TenantId"].ToObject<string>()
-                        )
-                    };
-                    sr.Close();
                 }
 
                 Scopes = new List<string>() {
@@ -103,12 +109,13 @@ namespace SendMailOAuth2.Models
 
                 #region send mail by SMTP
 
-                using (var smtpClient = new SmtpClient(new ProtocolLogger(Console.OpenStandardOutput())))
+                //using (var smtpClient = new SmtpClient(new ProtocolLogger("MailLog.log")))
+                using (var smtpClient = new SmtpClient())
                 {
                     await smtpClient.ConnectAsync(Host, Port, SecureSocketOptions.StartTls);
                     SaslMechanism oauth2 = new SaslMechanismOAuth2(Sender, accessToken);
                     await smtpClient.AuthenticateAsync(oauth2);
-                    smtpClient.Send(message);
+                    Console.WriteLine("smtp send message:", smtpClient.Send(message));
                     await smtpClient.DisconnectAsync(true);
                 }
 
@@ -219,55 +226,58 @@ namespace SendMailOAuth2.Models
         {
             try
             {
-                #region Khai báo
-
-                var currentAccessToken = _LocalTokenOAuth2?.AccessToken;
-                var currentAccount = _LocalTokenOAuth2?.Account;
-                var currentExpiresTime = _LocalTokenOAuth2?.ExpiresOn.UtcDateTime;
-
-                #endregion
-
-                #region Check if access token is valid
-
-                if (!String.IsNullOrWhiteSpace(currentAccessToken))
+                if (_LocalTokenOAuth2 != null)
                 {
-                    if (DateTime.UtcNow < currentExpiresTime) // if not expire
+                    #region Khai báo
+
+                    var currentAccessToken = _LocalTokenOAuth2?.AccessToken;
+                    var currentAccount = _LocalTokenOAuth2?.Account;
+                    var currentExpiresTime = _LocalTokenOAuth2?.ExpiresOn.UtcDateTime;
+
+                    #endregion
+
+                    #region Check if access token is valid
+
+                    if (!String.IsNullOrWhiteSpace(currentAccessToken))
                     {
-                        return currentAccessToken;
+                        if (DateTime.UtcNow < currentExpiresTime) // if not expire
+                        {
+                            return currentAccessToken;
+                        }
                     }
+
+                    #endregion
+
+                    #region Use current Account data to get access token if having one. Just like refresh token
+
+                    if (currentAccount != null)
+                    {
+                        //var account = (JObject)currentAccount;
+                        var getAccessTokenByRefreshTokenRequest = new GetAccessTokenByRefreshRequest
+                        {
+                            TenantId = _EmailConfig.TenantId,
+                            ClientId = _EmailConfig.ClientId,
+                            Scope = String.Join(" ", Scopes),
+                            Account = currentAccount,
+                            Scopes = this.Scopes,
+                        };
+                        var getAccessTokeResponse = await GetAccessTokenByRefresh(getAccessTokenByRefreshTokenRequest);
+                        if (getAccessTokeResponse == null)
+                        {
+                            throw new Exception("GetAccessTokenByRefreshToken failed. Cant renew access token");
+                        }
+                        if (_LocalTokenOAuth2 == null)
+                        {
+                            _LocalTokenOAuth2 = new TokenOAuth2();
+                        }
+                        _LocalTokenOAuth2.AccessToken = getAccessTokeResponse.AccessToken;
+                        _LocalTokenOAuth2.ExpiresOn = getAccessTokeResponse.ExpiresOn;
+                        _LocalTokenOAuth2.Save(_LocalStoragePath);
+                        return getAccessTokeResponse.AccessToken;
+                    }
+
+                    #endregion
                 }
-
-                #endregion
-
-                #region Use current Account data to get access token if having one. Just like refresh token
-
-                if (currentAccount != null)
-                {
-                    //var account = (JObject)currentAccount;
-                    var getAccessTokenByRefreshTokenRequest = new GetAccessTokenByRefreshRequest
-                    {
-                        TenantId = _EmailConfig.TenantId,
-                        ClientId = _EmailConfig.ClientId,
-                        Scope = String.Join(" ", Scopes),
-                        Account = currentAccount,
-                        Scopes = this.Scopes,
-                    };
-                    var getAccessTokeResponse = await GetAccessTokenByRefresh(getAccessTokenByRefreshTokenRequest);
-                    if (getAccessTokeResponse == null)
-                    {
-                        throw new Exception("GetAccessTokenByRefreshToken failed. Cant renew access token");
-                    }
-                    if (_LocalTokenOAuth2 == null)
-                    {
-                        _LocalTokenOAuth2 = new TokenOAuth2();
-                    }
-                    _LocalTokenOAuth2.AccessToken = getAccessTokeResponse.AccessToken;
-                    _LocalTokenOAuth2.ExpiresOn = getAccessTokeResponse.ExpiresOn;
-                    _LocalTokenOAuth2.Save(_LocalStoragePath);
-                    return getAccessTokeResponse.AccessToken;
-                }
-
-                #endregion
 
                 #region Use Grant code flow to get access token
 
