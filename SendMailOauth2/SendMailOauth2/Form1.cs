@@ -24,13 +24,6 @@ namespace SendMailOauth2
                     JObject jConfig = JObject.Parse(json);
                     Email._EmailConfig = jConfig["EmailConfig"].ToObject<EmailConfig>();
                 }
-                Email._LocalStoragePath = Path.Combine(currentDirectory, Email._EmailConfig.StoragePath);
-                using (var sr = new StreamReader(Email._LocalStoragePath))
-                {
-                    string json = sr.ReadToEnd();
-                    JObject jConfig = JObject.Parse(json);
-                    Email._LocalTokenOAuth2 = jConfig.ToObject<TokenOAuth2>();
-                }
             }
             catch (Exception ex)
             {

@@ -10,6 +10,7 @@ using SendMailOAuth2.Config;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -20,7 +21,7 @@ namespace SendMailOAuth2.Models
     class Email
     {
         static public EmailConfig _EmailConfig;
-        static public TokenOAuth2 _LocalTokenOAuth2;
+        public TokenOAuth2 _LocalTokenOAuth2;
         static public string _LocalStoragePath;
         public string Sender { get; set; }
         public string Password { get; set; }
@@ -32,6 +33,14 @@ namespace SendMailOAuth2.Models
         public int Port { get; set; }
         public List<string> Scopes { get; set; }
 
+
+        public Email()
+        {
+            var currentDirectory = Directory.GetCurrentDirectory();
+            Email._LocalStoragePath = Path.Combine(currentDirectory, _EmailConfig.StoragePath);
+
+        }
+
         /// <summary>
         /// Send mail with SMPTP
         /// </summary>
@@ -40,6 +49,33 @@ namespace SendMailOAuth2.Models
         {
             try
             {
+                using (var sr = new StreamReader(Email._LocalStoragePath))
+                {
+                    string json = sr.ReadToEnd();
+                    JObject jConfig = JObject.Parse(json);
+                    var jTokenOAuth2 = jConfig.ToObject<JObject>();
+
+                    var jGetTokenAccount = jTokenOAuth2["Account"];
+                    var jHomeAccountId = jGetTokenAccount["HomeAccountId"];
+                    if (_LocalTokenOAuth2 == null)
+                    {
+                        _LocalTokenOAuth2 = new TokenOAuth2();
+                    }
+                    _LocalTokenOAuth2.AccessToken = jTokenOAuth2["AccessToken"].ToObject<string>();
+                    _LocalTokenOAuth2.ExpiresOn = jTokenOAuth2["ExpiresOn"]?.ToObject<DateTimeOffset>() ?? default(DateTimeOffset);
+                    _LocalTokenOAuth2.Account = new GetTokenAccount
+                    {
+                        Environment = jGetTokenAccount["Environment"].ToObject<string>(),
+                        Username = jGetTokenAccount["Username"].ToObject<string>(),
+                        HomeAccountId = new Microsoft.Identity.Client.AccountId(
+                            jHomeAccountId["Identifier"].ToObject<string>(),
+                            jHomeAccountId["ObjectId"].ToObject<string>(),
+                            jHomeAccountId["TenantId"].ToObject<string>()
+                        )
+                    };
+                    sr.Close();
+                }
+
                 Scopes = new List<string>() {
                     //"openid",
                     //"offline_access",
@@ -108,7 +144,10 @@ namespace SendMailOAuth2.Models
                 var publicClientApplication = PublicClientApplicationBuilder
                     .CreateWithApplicationOptions(options)
                     .Build();
-                var getAccessTokenResponse = await publicClientApplication.AcquireTokenSilent(getAccessTokenByRefreshTokenRequest.Scopes, getAccessTokenByRefreshTokenRequest.Account).ExecuteAsync();
+                //var getAccessTokenResponse = await publicClientApplication.AcquireTokenSilent(getAccessTokenByRefreshTokenRequest.Scopes, (IAccount)getAccessTokenByRefreshTokenRequest.Account).ExecuteAsync();
+
+                var accounts = await publicClientApplication.GetAccountsAsync();
+                var getAccessTokenResponse = await publicClientApplication.AcquireTokenSilent(getAccessTokenByRefreshTokenRequest.Scopes, accounts.FirstOrDefault()).ExecuteAsync();
                 if (getAccessTokenResponse == null)
                 {
                     throw new Exception("AcquireTokenSilent failed. getAccessTokenResponse is null.");
@@ -184,7 +223,7 @@ namespace SendMailOAuth2.Models
 
                 var currentAccessToken = _LocalTokenOAuth2?.AccessToken;
                 var currentAccount = _LocalTokenOAuth2?.Account;
-                var currentExpiresTime = _LocalTokenOAuth2?.ExpiresOn;
+                var currentExpiresTime = _LocalTokenOAuth2?.ExpiresOn.UtcDateTime;
 
                 #endregion
 
