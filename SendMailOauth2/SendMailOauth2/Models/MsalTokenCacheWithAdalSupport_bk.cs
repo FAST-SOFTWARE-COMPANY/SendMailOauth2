@@ -2,7 +2,7 @@
 using System.IO;
 using System.Security.Cryptography;
 
-namespace ADAL2MSAL_bk
+namespace ADAL2MSAL
 {
     /// <summary>
     ///  IMPORTANT: encrypted files are suitable for desktop apps (public client apps), not for web sites, web services etc.
@@ -17,7 +17,7 @@ namespace ADAL2MSAL_bk
     /// <remarks>    
     /// This cache is configured so that MSAL **reads** from the ADAL cache file 
     /// </remarks>
-    class MsalTokenCacheWithAdalSupport
+    class MsalTokenCacheWithAdalSupport_bk
     {
         // For debugging purposes only!
         private const bool Encrypt = false;
@@ -26,7 +26,7 @@ namespace ADAL2MSAL_bk
         private readonly string _adalCacheFile;
         private readonly string _msalCacheFile;
 
-        public MsalTokenCacheWithAdalSupport(string adalCacheFile, string msalCacheFile)
+        public MsalTokenCacheWithAdalSupport_bk(string adalCacheFile, string msalCacheFile)
         {
             _adalCacheFile = adalCacheFile;
             _msalCacheFile = msalCacheFile;

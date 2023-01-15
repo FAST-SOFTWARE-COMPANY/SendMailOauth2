@@ -2,7 +2,7 @@
 using System.IO;
 using System.Security.Cryptography;
 
-namespace ADAL2MSAL_bk
+namespace ADAL2MSAL
 {
     /// <summary>
     ///  IMPORTANT: encrypted files are suitable for desktop apps (public client apps), not for web sites, web services etc.
@@ -20,15 +20,13 @@ namespace ADAL2MSAL_bk
     class MsalTokenCacheWithAdalSupport
     {
         // For debugging purposes only!
-        private const bool Encrypt = false;
+        private const bool Encrypt = true;
 
         private static readonly object _fileLock = new object();
-        private readonly string _adalCacheFile;
         private readonly string _msalCacheFile;
 
         public MsalTokenCacheWithAdalSupport(string adalCacheFile, string msalCacheFile)
         {
-            _adalCacheFile = adalCacheFile;
             _msalCacheFile = msalCacheFile;
         }
 
@@ -42,9 +40,6 @@ namespace ADAL2MSAL_bk
         {
             lock (_fileLock)
             {
-                // Load up any data from ADAL
-                args.TokenCache.DeserializeAdalV3(ReadFromFileIfExists(_adalCacheFile));
-
                 // Now load up the data from MSAL. Tokens will be merged.
                 args.TokenCache.DeserializeMsalV3(ReadFromFileIfExists(_msalCacheFile));
             }
@@ -58,10 +53,6 @@ namespace ADAL2MSAL_bk
                 lock (_fileLock)
                 {
                     WriteToFileIfNotNull(_msalCacheFile, args.TokenCache.SerializeMsalV3());
-                    if (!string.IsNullOrWhiteSpace(_adalCacheFile))
-                    {
-                        WriteToFileIfNotNull(_adalCacheFile, args.TokenCache.SerializeAdalV3());
-                    }
                 }
             }
         }
