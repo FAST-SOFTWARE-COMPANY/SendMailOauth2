@@ -1,20 +1,25 @@
-﻿using MailKit;
+﻿using ADAL2MSAL;
+using MailKit;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.Identity.Client;
+using Microsoft.Identity.Client.Extensions.Msal;
 using MimeKit;
 using Newtonsoft.Json.Linq;
 using SendMailOauth2.Configs;
 using SendMailOauth2.Extension;
+using SendMailOauth2.Properties;
 using SendMailOAuth2.Config;
 using System;
 using System.Collections.Generic;
+using System.IdentityModel;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace SendMailOAuth2.Models
 {
@@ -32,8 +37,8 @@ namespace SendMailOAuth2.Models
         public string Host { get; set; }
         public int Port { get; set; }
         public List<string> Scopes { get; set; }
-
-
+        private static string AdalCacheFile = System.Reflection.Assembly.GetExecutingAssembly().Location + ".adal_cache.txt";
+        private static string MsalCacheFile = System.Reflection.Assembly.GetExecutingAssembly().Location + ".msal_cache.txt";
         public Email()
         {
             var currentDirectory = Directory.GetCurrentDirectory();
@@ -49,39 +54,38 @@ namespace SendMailOAuth2.Models
         {
             try
             {
-                if (new FileInfo(Email._LocalStoragePath).Exists)
-                {
-                    using (var sr = new StreamReader(Email._LocalStoragePath))
-                    {
-                        string json = sr.ReadToEnd();
-                        JObject jConfig = JObject.Parse(json);
-                        var jTokenOAuth2 = jConfig.ToObject<JObject>();
+                //if (new FileInfo(Email._LocalStoragePath).Exists)
+                //{
+                //    using (var sr = new StreamReader(Email._LocalStoragePath))
+                //    {
+                //        string json = sr.ReadToEnd();
+                //        JObject jConfig = JObject.Parse(json);
+                //        var jTokenOAuth2 = jConfig.ToObject<JObject>();
 
-                        if (_LocalTokenOAuth2 == null)
-                        {
-                            _LocalTokenOAuth2 = new TokenOAuth2();
-                        }
-                        var jGetTokenAccount = jTokenOAuth2["Account"];
-                        if (jGetTokenAccount != null)
-                        {
-                            var jHomeAccountId = jGetTokenAccount["HomeAccountId"] ?? null;
-                            _LocalTokenOAuth2.AccessToken = jTokenOAuth2["AccessToken"].ToObject<string>();
-                            _LocalTokenOAuth2.ExpiresOn = jTokenOAuth2["ExpiresOn"]?.ToObject<DateTimeOffset>() ?? default(DateTimeOffset);
-                            _LocalTokenOAuth2.Account = new GetTokenAccount
-                            {
-                                Environment = jGetTokenAccount["Environment"].ToObject<string>(),
-                                Username = jGetTokenAccount["Username"].ToObject<string>(),
-                                HomeAccountId = new Microsoft.Identity.Client.AccountId(
-                                    jHomeAccountId["Identifier"].ToObject<string>(),
-                                    jHomeAccountId["ObjectId"].ToObject<string>(),
-                                    jHomeAccountId["TenantId"].ToObject<string>()
-                                )
-                            };
-                        }
-                        sr.Close();
-                    }
-                }
-
+                //        if (_LocalTokenOAuth2 == null)
+                //        {
+                //            _LocalTokenOAuth2 = new TokenOAuth2();
+                //        }
+                //        var jGetTokenAccount = jTokenOAuth2["Account"];
+                //        if (jGetTokenAccount != null)
+                //        {
+                //            var jHomeAccountId = jGetTokenAccount["HomeAccountId"] ?? null;
+                //            _LocalTokenOAuth2.AccessToken = jTokenOAuth2["AccessToken"].ToObject<string>();
+                //            _LocalTokenOAuth2.ExpiresOn = jTokenOAuth2["ExpiresOn"]?.ToObject<DateTimeOffset>() ?? default(DateTimeOffset);
+                //            _LocalTokenOAuth2.Account = new GetTokenAccount
+                //            {
+                //                Environment = jGetTokenAccount["Environment"].ToObject<string>(),
+                //                Username = jGetTokenAccount["Username"].ToObject<string>(),
+                //                HomeAccountId = new Microsoft.Identity.Client.AccountId(
+                //                    jHomeAccountId["Identifier"].ToObject<string>(),
+                //                    jHomeAccountId["ObjectId"].ToObject<string>(),
+                //                    jHomeAccountId["TenantId"].ToObject<string>()
+                //                )
+                //            };
+                //        }
+                //        sr.Close();
+                //    }
+                //}
                 Scopes = new List<string>() {
                     //"openid",
                     //"offline_access",
@@ -132,6 +136,31 @@ namespace SendMailOAuth2.Models
             }
         }
 
+        private IPublicClientApplication CreateMsalApp(string ClientId, string TenantId, string AbsoluteUri)
+        {
+
+            var pca = PublicClientApplicationBuilder
+                            .Create(ClientId)
+                            .WithTenantId(TenantId)
+                            .WithRedirectUri(AbsoluteUri)
+                            .Build();
+            MsalTokenCacheWithAdalSupport cache = new MsalTokenCacheWithAdalSupport(AdalCacheFile, MsalCacheFile);
+            cache.BindCache(pca.UserTokenCache);
+            return pca;
+        }
+
+        private IPublicClientApplication CreateMsalApp(PublicClientApplicationOptions options)
+        {
+
+            var pca = PublicClientApplicationBuilder
+                .CreateWithApplicationOptions(options)
+                .Build();
+            MsalTokenCacheWithAdalSupport cache = new MsalTokenCacheWithAdalSupport(AdalCacheFile, MsalCacheFile);
+            cache.BindCache(pca.UserTokenCache);
+            return pca;
+        }
+
+
         /// <author>Nguyen Tuan Khanh</author>
         /// <summary>
         /// Get access token by acquire token slient (similar to refresh token)
@@ -148,11 +177,7 @@ namespace SendMailOAuth2.Models
                     TenantId = getAccessTokenByRefreshTokenRequest.TenantId,
                     RedirectUri = getAccessTokenByRefreshTokenRequest.RedirectUri
                 };
-                var publicClientApplication = PublicClientApplicationBuilder
-                    .CreateWithApplicationOptions(options)
-                    .Build();
-                //var getAccessTokenResponse = await publicClientApplication.AcquireTokenSilent(getAccessTokenByRefreshTokenRequest.Scopes, (IAccount)getAccessTokenByRefreshTokenRequest.Account).ExecuteAsync();
-
+                var publicClientApplication = CreateMsalApp(options);
                 var accounts = await publicClientApplication.GetAccountsAsync();
                 var getAccessTokenResponse = await publicClientApplication.AcquireTokenSilent(getAccessTokenByRefreshTokenRequest.Scopes, accounts.FirstOrDefault()).ExecuteAsync();
                 if (getAccessTokenResponse == null)
@@ -191,13 +216,16 @@ namespace SendMailOAuth2.Models
                     TenantId = getAccessTokenByAuthoizationCodeRequest.TenantId,
                     RedirectUri = getAccessTokenByAuthoizationCodeRequest.RedirectUri,
                 };
-                var publicClientApplication = PublicClientApplicationBuilder
-                    .CreateWithApplicationOptions(options)
-                    .Build();
+                var publicClientApplication = CreateMsalApp(options);
+                //var getAuthorizationCodeResponse = await publicClientApplication
+                //    .AcquireTokenInteractive(getAccessTokenByAuthoizationCodeRequest.Scopes)
+                //    .WithLoginHint(getAccessTokenByAuthoizationCodeRequest.Username)
+                //    .ExecuteAsync();
+
                 var getAuthorizationCodeResponse = await publicClientApplication
                     .AcquireTokenInteractive(getAccessTokenByAuthoizationCodeRequest.Scopes)
-                    .WithLoginHint(getAccessTokenByAuthoizationCodeRequest.Username)
                     .ExecuteAsync();
+
                 if (getAuthorizationCodeResponse == null)
                 {
                     throw new Exception("Get token with authorization code grant flow failed. getAuthorizationCodeResponse is null.");
@@ -224,104 +252,125 @@ namespace SendMailOAuth2.Models
         /// <returns>string</returns>
         private async Task<string> GetAccessToken()
         {
+            AuthenticationResult result = null;
+
             try
             {
-                if (_LocalTokenOAuth2 != null)
-                {
-                    #region Khai báo
+                //if (_LocalTokenOAuth2 != null)
+                //{
+                //    #region Khai báo
 
-                    var currentAccessToken = _LocalTokenOAuth2?.AccessToken;
-                    var currentAccount = _LocalTokenOAuth2?.Account;
-                    var currentExpiresTime = _LocalTokenOAuth2?.ExpiresOn.UtcDateTime;
+                //    var currentAccessToken = _LocalTokenOAuth2?.AccessToken;
+                //    var currentAccount = _LocalTokenOAuth2?.Account;
+                //    var currentExpiresTime = _LocalTokenOAuth2?.ExpiresOn.UtcDateTime;
 
-                    #endregion
+                //    #endregion
 
-                    #region Check if access token is valid
+                //    #region Check if access token is valid
 
-                    if (!String.IsNullOrWhiteSpace(currentAccessToken))
-                    {
-                        if (DateTime.UtcNow < currentExpiresTime) // if not expire
-                        {
-                            return currentAccessToken;
-                        }
-                    }
+                //    if (!String.IsNullOrWhiteSpace(currentAccessToken))
+                //    {
+                //        if (DateTime.UtcNow < currentExpiresTime) // if not expire
+                //        {
+                //            return currentAccessToken;
+                //        }
+                //    }
 
-                    #endregion
+                //    #endregion
 
-                    #region Use current Account data to get access token if having one. Just like refresh token
+                //    #region Use current Account data to get access token if having one. Just like refresh token
 
-                    if (currentAccount != null)
-                    {
-                        //var account = (JObject)currentAccount;
-                        var getAccessTokenByRefreshTokenRequest = new GetAccessTokenByRefreshRequest
-                        {
-                            TenantId = _EmailConfig.TenantId,
-                            ClientId = _EmailConfig.ClientId,
-                            Scope = String.Join(" ", Scopes),
-                            Account = currentAccount,
-                            Scopes = this.Scopes,
-                        };
-                        var getAccessTokeResponse = await GetAccessTokenByRefresh(getAccessTokenByRefreshTokenRequest);
-                        if (getAccessTokeResponse == null)
-                        {
-                            throw new Exception("GetAccessTokenByRefreshToken failed. Cant renew access token");
-                        }
-                        if (_LocalTokenOAuth2 == null)
-                        {
-                            _LocalTokenOAuth2 = new TokenOAuth2();
-                        }
-                        _LocalTokenOAuth2.AccessToken = getAccessTokeResponse.AccessToken;
-                        _LocalTokenOAuth2.ExpiresOn = getAccessTokeResponse.ExpiresOn;
-                        _LocalTokenOAuth2.Save(_LocalStoragePath);
-                        return getAccessTokeResponse.AccessToken;
-                    }
+                //    if (currentAccount != null)
+                //    {
+                //        //var account = (JObject)currentAccount;
+                //        var getAccessTokenByRefreshTokenRequest = new GetAccessTokenByRefreshRequest
+                //        {
+                //            TenantId = _EmailConfig.TenantId,
+                //            ClientId = _EmailConfig.ClientId,
+                //            Scope = String.Join(" ", Scopes),
+                //            Account = currentAccount,
+                //            Scopes = this.Scopes,
+                //        };
+                //        var getAccessTokeResponse = await GetAccessTokenByRefresh(getAccessTokenByRefreshTokenRequest);
+                //        if (getAccessTokeResponse == null)
+                //        {
+                //            throw new Exception("GetAccessTokenByRefreshToken failed. Cant renew access token");
+                //        }
+                //        if (_LocalTokenOAuth2 == null)
+                //        {
+                //            _LocalTokenOAuth2 = new TokenOAuth2();
+                //        }
+                //        _LocalTokenOAuth2.AccessToken = getAccessTokeResponse.AccessToken;
+                //        _LocalTokenOAuth2.ExpiresOn = getAccessTokeResponse.ExpiresOn;
+                //        _LocalTokenOAuth2.Save(_LocalStoragePath);
+                //        return getAccessTokeResponse.AccessToken;
+                //    }
 
-                    #endregion
-                }
+                //    #endregion
+                //}
 
-                #region Use Grant code flow to get access token
+                //#region Use Grant code flow to get access token
 
-                var getAccessTokenByAuthorizationCodeRequest = new GetAccessTokenByAuthoizationCodeRequest
+                //var getAccessTokenByAuthorizationCodeRequest = new GetAccessTokenByAuthoizationCodeRequest
+                //{
+                //    ClientId = _EmailConfig.ClientId,
+                //    RedirectUri = _EmailConfig.RedirectUri,
+                //    TenantId = _EmailConfig.TenantId,
+                //    Scopes = Scopes,
+                //    Username = this.Sender
+                //};
+                //var getAccessTokenByAuthorizationCodeResponse = await GetAccessTokenByAuthorizationCode(getAccessTokenByAuthorizationCodeRequest);
+                //if (getAccessTokenByAuthorizationCodeResponse == null)
+                //{
+                //    throw new Exception("GetAccessTokenByAuthorizationCode failed. cant get access token");
+                //}
+                //if (_LocalTokenOAuth2 == null)
+                //{
+                //    _LocalTokenOAuth2 = new TokenOAuth2();
+                //}
+                //_LocalTokenOAuth2.AccessToken = getAccessTokenByAuthorizationCodeResponse.AccessToken;
+                //_LocalTokenOAuth2.ExpiresOn = getAccessTokenByAuthorizationCodeResponse.ExpiresOn;
+                //_LocalTokenOAuth2.Account = new GetTokenAccount
+                //{
+                //    Username = getAccessTokenByAuthorizationCodeResponse.Account.Username,
+                //    Environment = getAccessTokenByAuthorizationCodeResponse.Account.Environment,
+                //    HomeAccountId = getAccessTokenByAuthorizationCodeResponse.Account.HomeAccountId
+                //};
+                //_LocalTokenOAuth2.Save(_LocalStoragePath);
+                //LogWriter.Write("Get access token successfully");
+                //return getAccessTokenByAuthorizationCodeResponse.AccessToken;
+
+                //#endregion
+                var options = new PublicClientApplicationOptions
                 {
                     ClientId = _EmailConfig.ClientId,
-                    RedirectUri = _EmailConfig.RedirectUri,
                     TenantId = _EmailConfig.TenantId,
-                    Scopes = Scopes,
-                    Username = this.Sender
+                    RedirectUri = _EmailConfig.RedirectUri
                 };
-                var getAccessTokenByAuthorizationCodeResponse = await GetAccessTokenByAuthorizationCode(getAccessTokenByAuthorizationCodeRequest);
-                if (getAccessTokenByAuthorizationCodeResponse == null)
+                var app = CreateMsalApp(options);
+                try
                 {
-                    throw new Exception("GetAccessTokenByAuthorizationCode failed. cant get access token");
+                    var accounts = await app.GetAccountsAsync();
+                    result = await app.AcquireTokenSilent(Scopes, accounts.FirstOrDefault())
+                       .ExecuteAsync();
                 }
-                if (_LocalTokenOAuth2 == null)
+                catch (MsalUiRequiredException mex)
                 {
-                    _LocalTokenOAuth2 = new TokenOAuth2();
+                    var message = "Error Acquiring Token";
+                    LogWriter.WriteException(mex, message);
+                    result = await app.AcquireTokenInteractive(Scopes).ExecuteAsync();
                 }
-                _LocalTokenOAuth2.AccessToken = getAccessTokenByAuthorizationCodeResponse.AccessToken;
-                _LocalTokenOAuth2.ExpiresOn = getAccessTokenByAuthorizationCodeResponse.ExpiresOn;
-                _LocalTokenOAuth2.Account = new GetTokenAccount
-                {
-                    Username = getAccessTokenByAuthorizationCodeResponse.Account.Username,
-                    Environment = getAccessTokenByAuthorizationCodeResponse.Account.Environment,
-                    HomeAccountId = getAccessTokenByAuthorizationCodeResponse.Account.HomeAccountId
-                };
-                _LocalTokenOAuth2.Save(_LocalStoragePath);
-                LogWriter.Write("Get access token successfully");
-                return getAccessTokenByAuthorizationCodeResponse.AccessToken;
-
-                #endregion
             }
             catch (Exception ex)
             {
-                var message = "GetAccessToken fail";
+                var message = "GetAccessToken fail. Error Acquiring Token Silently";
                 LogWriter.WriteException(ex, message);
-                return null;
             }
-            finally
+            if (result != null)
             {
-                // write log
+                return result.AccessToken;
             }
+            return null;
         }
     }
 }
